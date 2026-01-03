@@ -50,9 +50,12 @@
 
   function escapeHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
+  const inferredDayEventsGlobal = [];
+
   function parseDayLabel(row){
     const repeat = (row.repeat_day||'').trim();
     if(repeat) return repeat;
+
     const dateStr = (row.date||'').trim();
     if(dateStr){
       // try dd-MMM-yy or dd-MMM-YYYY
@@ -68,6 +71,55 @@
       const dt2 = new Date(dateStr);
       if(!isNaN(dt2)) return ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dt2.getDay()];
     }
+
+    // fallback: try to extract a date from the address, notes, or preview
+    const textCandidates = [row.address, row.venue_name, row.notes, row.source_preview, row.event_title].map(s=>String(s||'')).join(' ');
+
+    function tryParseFromText(txt){
+      if(!txt) return null;
+      const now = new Date();
+      const currentYear = now.getFullYear();
+
+      // 1) dd-MMM-yy or dd-MMM-yyyy  (e.g., 5-Jun-24 or 05-Jun-2024)
+      const m1 = txt.match(/\b(\d{1,2})[- ]([A-Za-z]{3,9})[- ](\d{2,4})\b/);
+      if(m1){
+        const dd = m1[1]; const mon = m1[2]; let yy = m1[3]; yy = yy.length===2 ? '20'+yy : yy; const iso = `${dd} ${mon} ${yy}`; const d = new Date(iso); if(!isNaN(d)) return d;
+      }
+
+      // 2) MonthName dd, yyyy or MonthName dd (e.g., June 5 2024, Jun 5th)
+      const m2 = txt.match(/\b([A-Za-z]{3,9})\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s*(\d{2,4}))?/i);
+      if(m2){
+        const mon = m2[1]; const dd = m2[2]; let yy = m2[3] || currentYear; yy = String(yy).length===2 ? '20'+yy : yy; const iso = `${dd} ${mon} ${yy}`; const d = new Date(iso); if(!isNaN(d)) return d;
+      }
+
+      // 3) yyyy-mm-dd
+      const m3 = txt.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/);
+      if(m3){ const iso = `${m3[1]}-${m3[2].padStart(2,'0')}-${m3[3].padStart(2,'0')}`; const d = new Date(iso); if(!isNaN(d)) return d; }
+
+      // 4) dd/mm/yyyy or dd/mm/yy
+      const m4 = txt.match(/\b(\d{1,2})[\/.](\d{1,2})[\/.](\d{2,4})\b/);
+      if(m4){
+        let dd = parseInt(m4[1],10); let mm = parseInt(m4[2],10); let yy = String(m4[3]); if(yy.length===2) yy = '20'+yy; const iso = `${yy}-${String(mm).padStart(2,'0')}-${String(dd).padStart(2,'0')}`; const d = new Date(iso); if(!isNaN(d)) return d;
+      }
+
+      // 5) weekday name + dd (e.g., Mon 5 Jun)
+      const m5 = txt.match(/\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b\s*(\d{1,2})/i);
+      if(m5){
+        // not a reliable full date, skip
+      }
+
+      return null;
+    }
+
+    const inferredDate = tryParseFromText(textCandidates);
+    if(inferredDate && !isNaN(inferredDate)){
+      const weekday = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][inferredDate.getDay()];
+      const id = row.event_id || row.venue_name || row.event_title || '(unknown)';
+      inferredDayEventsGlobal.push({ id, inferredDate: inferredDate.toISOString().slice(0,10), weekday, source: 'address' });
+      console.info('Inferred date for', id, '->', inferredDate.toISOString().slice(0,10), weekday);
+      return weekday;
+    }
+
     return 'Unknown';
   }
 
@@ -341,7 +393,8 @@
     processRows._triedIconFiles = Array.from(triedIconFiles);
     processRows._noIconEvents = noIconEvents;
     processRows._unknownDayEvents = unknownDayEvents;
-    window._eventMap = { map, markerCluster, markersByDay, dayState: globalDayState, refreshCluster, missingIconFiles: processRows._missingIconFiles, triedIconFiles: processRows._triedIconFiles, noIconEvents: processRows._noIconEvents, unknownDayEvents: processRows._unknownDayEvents };
+    processRows._inferredDayEvents = inferredDayEventsGlobal;
+    window._eventMap = { map, markerCluster, markersByDay, dayState: globalDayState, refreshCluster, missingIconFiles: processRows._missingIconFiles, triedIconFiles: processRows._triedIconFiles, noIconEvents: processRows._noIconEvents, unknownDayEvents: processRows._unknownDayEvents, inferredDayEvents: processRows._inferredDayEvents };
     // update global control counts now that markers are loaded
     if(window._updateDayButtons) window._updateDayButtons();
     }catch(err){
