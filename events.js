@@ -9,6 +9,45 @@
   const markerCluster = L.markerClusterGroup();
   map.addLayer(markerCluster);
 
+  // Global weekday toggle control (always present in the map)
+  const WEEKDAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+  const globalDayState = {};
+  WEEKDAYS.forEach(d=> globalDayState[d]=true);
+
+  function refreshClusterGlobal(){ if(window._eventMap && typeof window._eventMap.refreshCluster==='function') window._eventMap.refreshCluster(); }
+  function openPopupsGlobal(day){ if(window._eventMap && typeof window._eventMap.openPopupsForDay==='function') window._eventMap.openPopupsForDay(day); }
+  function closePopupsGlobal(day){ if(window._eventMap && typeof window._eventMap.closePopupsForDay==='function') window._eventMap.closePopupsForDay(day); }
+
+  const GlobalDayToggleControl = L.Control.extend({
+    options: { position: 'topright' },
+    onAdd: function(){
+      const container = L.DomUtil.create('div','day-toggle global-day-toggle');
+      container.style.zIndex = 1300;
+      container.innerHTML = `<div style="font-weight:600;margin-bottom:6px">Show events by day</div>`;
+
+      WEEKDAYS.forEach(d=>{
+        const btn = L.DomUtil.create('button','day-btn', container);
+        btn.dataset.day = d;
+        btn.innerHTML = `${d} <span class="day-count">(0)</span>`;
+        if(globalDayState[d]) btn.classList.add('active');
+        btn.onclick = function(e){ L.DomEvent.stopPropagation(e); globalDayState[d] = !globalDayState[d]; btn.classList.toggle('active', globalDayState[d]); refreshClusterGlobal(); if(globalDayState[d]) setTimeout(()=> openPopupsGlobal(d), 250); else closePopupsGlobal(d); };
+      });
+      const controls = L.DomUtil.create('div','controls', container);
+      const selectAll = L.DomUtil.create('button','','controls'); selectAll.textContent = 'Select All';
+      selectAll.onclick = function(e){ L.DomEvent.stopPropagation(e); WEEKDAYS.forEach(d=>{ globalDayState[d]=true; }); updateGlobalButtons(); refreshClusterGlobal(); };
+      const clearAll = L.DomUtil.create('button','','controls'); clearAll.textContent = 'Clear All';
+      clearAll.onclick = function(e){ L.DomEvent.stopPropagation(e); WEEKDAYS.forEach(d=>{ globalDayState[d]=false; }); updateGlobalButtons(); refreshClusterGlobal(); };
+
+      function updateGlobalButtons(){ const btns = container.querySelectorAll('.day-btn'); btns.forEach(btn=>{ const d = btn.dataset.day; btn.classList.toggle('active', !!globalDayState[d]); const count = (markersByDay[d]||[]).length; const span = btn.querySelector('.day-count'); if(span) span.textContent = `(${count})`; }); }
+
+      // expose updater so processRows can refresh counts
+      window._updateDayButtons = updateGlobalButtons;
+      return container;
+    }
+  });
+
+  map.addControl(new GlobalDayToggleControl());
+
   function escapeHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
   function parseDayLabel(row){
@@ -227,77 +266,21 @@
       return String(a).localeCompare(String(b));
     });
 
-    // show all markers by default
-    const dayState = {};
-    days.forEach(d=> dayState[d]=true);
+    // reference global day state (shared with the persistent control)
+    const dayState = globalDayState;
 
     function refreshCluster(){
       markerCluster.clearLayers();
-      Object.keys(dayState).forEach(d=>{
-        if(dayState[d]) markersByDay[d].forEach(m=> markerCluster.addLayer(m));
+      days.forEach(d=>{
+        if(globalDayState[d]) (markersByDay[d]||[]).forEach(m=> markerCluster.addLayer(m));
       });
     }
 
     refreshCluster();
 
-    // remove any existing control and add a new one
-    const existing = document.querySelector('.leaflet-control.day-toggle');
-    if(existing && existing._leaflet_pos){
-      existing.parentNode && existing.parentNode.removeChild(existing);
-    }
-
-    const DayToggleControl = L.Control.extend({
-      options: { position: 'topright' },
-      onAdd: function(){
-        const container = L.DomUtil.create('div','day-toggle');
-        container.style.zIndex = 1200;
-        container.innerHTML = `<div style="font-weight:600;margin-bottom:6px">Show events by day</div>`;
-
-        if(!days || days.length===0){
-          const none = document.createElement('div'); none.textContent = 'No events'; none.style.opacity = '0.8'; container.appendChild(none); return container;
-        }
-
-        days.forEach(d=>{
-          const btn = L.DomUtil.create('button','day-btn', container);
-          const count = (markersByDay[d]||[]).length;
-          btn.innerHTML = `${d} <span class="day-count">(${count})</span>`;
-          if(dayState[d]) btn.classList.add('active');
-          btn.onclick = function(e){
-            L.DomEvent.stopPropagation(e);
-            dayState[d] = !dayState[d];
-            btn.classList.toggle('active', dayState[d]);
-            refreshCluster();
-            // open popups for markers of this day when toggled on, close when toggled off
-            if(dayState[d]){
-              setTimeout(()=> openPopupsForDay(d), 250);
-            }else{
-              closePopupsForDay(d);
-            }
-          };
-        });
-
-        const controls = L.DomUtil.create('div','controls', container);
-        const selectAll = L.DomUtil.create('button','','controls');
-        selectAll.textContent = 'Select All';
-        selectAll.onclick = function(e){ L.DomEvent.stopPropagation(e); days.forEach(d=>dayState[d]=true); updateButtons(container); refreshCluster(); };
-        const clearAll = L.DomUtil.create('button','','controls');
-        clearAll.textContent = 'Clear All';
-        clearAll.onclick = function(e){ L.DomEvent.stopPropagation(e); days.forEach(d=>dayState[d]=false); updateButtons(container); refreshCluster(); };
-
-        return container;
-      }
-    });
-
-    function updateButtons(container){
-      const btns = container.querySelectorAll('.day-btn');
-      btns.forEach(btn=>{
-        const day = btn.innerText.split(' ')[0];
-        const active = !!dayState[day];
-        btn.classList.toggle('active', active);
-      });
-    }
-
-    map.addControl(new DayToggleControl());
+    // The per-processRows DayToggle is now replaced by the global control added to the map.
+    // Refresh counts on the global control if available
+    if(window._updateDayButtons) window._updateDayButtons();
 
     // helper to open/close all popups (used by select/clear actions if needed)
     function openAllPopups(){ Object.keys(markersByDay).forEach(d=> openPopupsForDay(d)); }
@@ -358,7 +341,9 @@
     processRows._triedIconFiles = Array.from(triedIconFiles);
     processRows._noIconEvents = noIconEvents;
     processRows._unknownDayEvents = unknownDayEvents;
-    window._eventMap = { map, markerCluster, markersByDay, dayState, refreshCluster, missingIconFiles: processRows._missingIconFiles, triedIconFiles: processRows._triedIconFiles, noIconEvents: processRows._noIconEvents, unknownDayEvents: processRows._unknownDayEvents };
+    window._eventMap = { map, markerCluster, markersByDay, dayState: globalDayState, refreshCluster, missingIconFiles: processRows._missingIconFiles, triedIconFiles: processRows._triedIconFiles, noIconEvents: processRows._noIconEvents, unknownDayEvents: processRows._unknownDayEvents };
+    // update global control counts now that markers are loaded
+    if(window._updateDayButtons) window._updateDayButtons();
     }catch(err){
       console.error('processRows error', err);
       // show an error control so the user sees a visible failure on the map
