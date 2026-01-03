@@ -42,7 +42,7 @@
     daysSet.clear();
   }
 
-  function processRows(rows){
+  async function processRows(rows){
     clearData();
 
     // colours for days of week
@@ -60,6 +60,7 @@
     // counters per day and type (phone/pen)
     const countsByDay = {};
     const iconCache = { phone: {}, pen: {} };
+    const iconPromises = { phone: {}, pen: {} };
 
     function detectType(r){
       const titleTest = (r.event_title||'').toLowerCase();
@@ -70,19 +71,53 @@
       return 'phone';
     }
 
-    function getIcon(type, day){
-      if(iconCache[type] && iconCache[type][day]) return iconCache[type][day];
+    function sanitizeDayForFile(day){
+      if(!day) return '';
+      const s = String(day||'').trim();
+      return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+    }
+
+    function getIconFilename(type, day){
       const filePrefix = type==='phone' ? 'PhoneQuiz' : 'PenQuiz';
-      const filename = `${filePrefix}${day}.png`;
-      const icon = L.icon({ iconUrl: filename, iconSize: [28,28], iconAnchor: [14,28], popupAnchor: [0,-24] });
+      const dayKey = sanitizeDayForFile(day);
+      return `${filePrefix}${dayKey}.png`;
+    }
+
+    function loadImagePromise(url, timeout = 2500){
+      return new Promise(resolve=>{
+        const img = new Image();
+        let done = false;
+        const onDone = (ok)=>{ if(done) return; done = true; img.onload = img.onerror = null; resolve(ok); };
+        img.onload = ()=> onDone(true);
+        img.onerror = ()=> onDone(false);
+        img.src = url;
+        setTimeout(()=> onDone(false), timeout);
+      });
+    }
+
+    async function ensureIcon(type, day){
+      // return cached result if available (may be icon or null)
+      if(iconCache[type] && Object.prototype.hasOwnProperty.call(iconCache[type], day)) return iconCache[type][day];
+      if(iconPromises[type] && iconPromises[type][day]) return await iconPromises[type][day];
+      const filename = getIconFilename(type, day);
+      const promise = (async ()=>{
+        if(!day || String(day).toLowerCase()==='unknown') return null;
+        const ok = await loadImagePromise(filename);
+        if(!ok) return null;
+        const icon = L.icon({ iconUrl: filename, iconSize: [28,28], iconAnchor: [14,28], popupAnchor: [0,-24] });
+        iconCache[type][day] = icon;
+        return icon;
+      })();
+      iconPromises[type][day] = promise;
+      const icon = await promise;
       iconCache[type][day] = icon;
       return icon;
     }
 
-    rows.forEach(r=>{
+    for(const r of rows){
       const lat = parseFloat(r.latitude);
       const lng = parseFloat(r.longitude);
-      if(!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+      if(!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
       const day = parseDayLabel(r);
       daysSet.add(day);
       markersByDay[day] = markersByDay[day] || [];
@@ -104,11 +139,10 @@
 
       // choose an icon based on type/day; fall back to colored circle if icon missing
       let marker;
-      try{
-        const icon = getIcon(type, day);
+      const icon = await ensureIcon(type, day);
+      if(icon){
         marker = L.marker([lat,lng], { icon, title });
-      }catch(e){
-        // fallback
+      }else{
         const color = dayColors[day] || '#888';
         marker = L.circleMarker([lat,lng], { radius: 7, fillColor: color, color: '#222', weight: 1, opacity: 1, fillOpacity: 0.9, title });
       }
@@ -127,7 +161,7 @@
       marker.__day = day;
       marker.__type = type;
       markersByDay[day].push(marker);
-    });
+    }
 
     // expose counts for legend
     processRows._countsByDay = countsByDay;
@@ -243,7 +277,7 @@
   (function(){
     const tryUrl = window.EVENTS_CSV_URL || (location.protocol.startsWith('http') ? 'Speedquizzingexport20260102.csv' : null);
     if(tryUrl){
-      Papa.parse(tryUrl, { download: true, header: true, skipEmptyLines: true, complete: (res)=>{ processRows(res.data||[]); } });
+      Papa.parse(tryUrl, { download: true, header: true, skipEmptyLines: true, complete: async (res)=>{ await processRows(res.data||[]); } });
     }
   })();
 
