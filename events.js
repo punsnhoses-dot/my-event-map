@@ -61,6 +61,8 @@
     const countsByDay = {};
     const iconCache = { phone: {}, pen: {} };
     const iconPromises = { phone: {}, pen: {} };
+    const missingIconFiles = new Set();
+    const validDays = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 
     function detectType(r){
       const titleTest = (r.event_title||'').toLowerCase();
@@ -100,10 +102,12 @@
       if(iconCache[type] && Object.prototype.hasOwnProperty.call(iconCache[type], day)) return iconCache[type][day];
       if(iconPromises[type] && iconPromises[type][day]) return await iconPromises[type][day];
       const filename = getIconFilename(type, day);
+      const dayKey = sanitizeDayForFile(day);
       const promise = (async ()=>{
-        if(!day || String(day).toLowerCase()==='unknown') return null;
+        // only attempt to load icons for known weekdays
+        if(!dayKey || validDays.indexOf(dayKey)===-1) return null;
         const ok = await loadImagePromise(filename);
-        if(!ok) return null;
+        if(!ok){ missingIconFiles.add(filename); iconCache[type][day] = null; return null; }
         const icon = L.icon({ iconUrl: filename, iconSize: [28,28], iconAnchor: [14,28], popupAnchor: [0,-24] });
         iconCache[type][day] = icon;
         return icon;
@@ -267,7 +271,9 @@
 
     map.addControl(new LegendControl());
 
-    window._eventMap = { map, markerCluster, markersByDay, dayState, refreshCluster };
+    // expose missing icon files for debugging
+    processRows._missingIconFiles = Array.from(missingIconFiles);
+    window._eventMap = { map, markerCluster, markersByDay, dayState, refreshCluster, missingIconFiles: processRows._missingIconFiles };
   }
 
   // Uploader removed: public visitors cannot upload files. To update CSV, replace `Speedquizzingexport20260102.csv` in the same folder where this page is hosted or set `window.EVENTS_CSV_URL` before loading the script.
