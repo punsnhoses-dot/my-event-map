@@ -63,6 +63,8 @@
     const iconPromises = { phone: {}, pen: {} };
     const missingIconFiles = new Set();
     const validDays = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    const noIconEvents = []; // {title, day, type, candidates}
+    const unknownDayEvents = []; // {title, rawDay}
 
     function detectType(r){
       const titleTest = (r.event_title||'').toLowerCase();
@@ -179,12 +181,19 @@
       else if(type === 'pen') countsByDay[day].pen++;
       else countsByDay[day].other++;
 
+      // if day is unknown, record for debugging
+      const dayKeyDebug = sanitizeDayForFile(day);
+      if(!dayKeyDebug || validDays.indexOf(dayKeyDebug)===-1){ unknownDayEvents.push({ title, rawDay: day }); }
+
       // choose an icon based on type/day; fall back to colored circle if icon missing
       let marker;
       const icon = await ensureIcon(type, day);
       if(icon){
         marker = L.marker([lat,lng], { icon, title });
       }else{
+        // record this event for debugging along with candidates attempted
+        noIconEvents.push({ title, day, type, candidates: getIconCandidates(type, day) });
+        console.warn('No icon found for event', title, day, type, getIconCandidates(type, day));
         const color = dayColors[day] || '#888';
         marker = L.circleMarker([lat,lng], { radius: 7, fillColor: color, color: '#222', weight: 1, opacity: 1, fillOpacity: 0.9, title });
       }
@@ -252,6 +261,12 @@
             dayState[d] = !dayState[d];
             btn.classList.toggle('active', dayState[d]);
             refreshCluster();
+            // open popups for markers of this day when toggled on, close when toggled off
+            if(dayState[d]){
+              setTimeout(()=> openPopupsForDay(d), 250);
+            }else{
+              closePopupsForDay(d);
+            }
           };
         });
 
@@ -277,6 +292,25 @@
     }
 
     map.addControl(new DayToggleControl());
+
+    // helper to open/close all popups (used by select/clear actions if needed)
+    function openAllPopups(){ Object.keys(markersByDay).forEach(d=> openPopupsForDay(d)); }
+    function closeAllPopups(){ Object.keys(markersByDay).forEach(d=> closePopupsForDay(d)); }
+
+    // expose popup helpers for external control
+    window._eventMap = Object.assign(window._eventMap || {}, { openPopupsForDay, closePopupsForDay, openAllPopups, closeAllPopups });
+
+    function openPopupsForDay(day){
+      if(!(markersByDay[day]||[]).length) return;
+      // only open popups for markers that are currently shown as individual markers (not clustered)
+      (markersByDay[day]||[]).forEach(m=>{
+        try{ if(markerCluster.hasLayer(m) && m._icon && map.getBounds().contains(m.getLatLng())) m.openPopup(); }catch(e){}
+      });
+    }
+
+    function closePopupsForDay(day){
+      (markersByDay[day]||[]).forEach(m=>{ try{ m.closePopup(); }catch(e){} });
+    }
 
     // remove any existing legend and add a colour legend for the days
     const existingLegend = document.querySelector('.leaflet-control.legend-daycolors');
@@ -309,10 +343,12 @@
 
     map.addControl(new LegendControl());
 
-    // expose tried and missing icon files for debugging
+    // expose tried and missing icon files and per-event diagnostics for debugging
     processRows._missingIconFiles = Array.from(missingIconFiles);
     processRows._triedIconFiles = Array.from(triedIconFiles);
-    window._eventMap = { map, markerCluster, markersByDay, dayState, refreshCluster, missingIconFiles: processRows._missingIconFiles, triedIconFiles: processRows._triedIconFiles };
+    processRows._noIconEvents = noIconEvents;
+    processRows._unknownDayEvents = unknownDayEvents;
+    window._eventMap = { map, markerCluster, markersByDay, dayState, refreshCluster, missingIconFiles: processRows._missingIconFiles, triedIconFiles: processRows._triedIconFiles, noIconEvents: processRows._noIconEvents, unknownDayEvents: processRows._unknownDayEvents };
   }
 
   // Uploader removed: public visitors cannot upload files. To update CSV, replace `Speedquizzingexport20260102.csv` in the same folder where this page is hosted or set `window.EVENTS_CSV_URL` before loading the script.
