@@ -43,7 +43,8 @@
   }
 
   async function processRows(rows){
-    clearData();
+    try{
+      clearData();
 
     // colours for days of week
     const dayColors = {
@@ -249,7 +250,12 @@
       options: { position: 'topright' },
       onAdd: function(){
         const container = L.DomUtil.create('div','day-toggle');
+        container.style.zIndex = 1200;
         container.innerHTML = `<div style="font-weight:600;margin-bottom:6px">Show events by day</div>`;
+
+        if(!days || days.length===0){
+          const none = document.createElement('div'); none.textContent = 'No events'; none.style.opacity = '0.8'; container.appendChild(none); return container;
+        }
 
         days.forEach(d=>{
           const btn = L.DomUtil.create('button','day-btn', container);
@@ -320,10 +326,14 @@
       options: { position: 'bottomright' },
       onAdd: function(){
         const container = L.DomUtil.create('div','day-toggle legend-daycolors');
+        container.style.zIndex = 1200;
         container.innerHTML = `<div style="font-weight:600;margin-bottom:6px">Day colours</div>`;
         const dayColorsLocal = {
           'Monday': '#1f77b4', 'Tuesday': '#ff7f0e', 'Wednesday': '#2ca02c', 'Thursday': '#d62728', 'Friday': '#9467bd', 'Saturday': '#8c564b', 'Sunday': '#e377c2', 'Unknown': '#777'
         };
+        if(!days || days.length===0){
+          const none = document.createElement('div'); none.textContent = 'No events'; none.style.opacity = '0.8'; container.appendChild(none); return container;
+        }
         days.forEach(d=>{
           const color = dayColorsLocal[d] || '#888';
           const entry = document.createElement('div');
@@ -349,7 +359,13 @@
     processRows._noIconEvents = noIconEvents;
     processRows._unknownDayEvents = unknownDayEvents;
     window._eventMap = { map, markerCluster, markersByDay, dayState, refreshCluster, missingIconFiles: processRows._missingIconFiles, triedIconFiles: processRows._triedIconFiles, noIconEvents: processRows._noIconEvents, unknownDayEvents: processRows._unknownDayEvents };
-  }
+    }catch(err){
+      console.error('processRows error', err);
+      // show an error control so the user sees a visible failure on the map
+      const ErrorControl = L.Control.extend({ options:{position:'topright'}, onAdd: function(){ const c = L.DomUtil.create('div','day-toggle'); c.style.zIndex = 1400; c.innerHTML = `<div style="font-weight:700;color:#b00">Error loading events</div><div style="font-size:90%">${escapeHtml(err && err.message ? err.message : String(err))}</div>`; return c; } });
+      map.addControl(new ErrorControl());
+      throw err;
+    }
 
   // Uploader removed: public visitors cannot upload files. To update CSV, replace `Speedquizzingexport20260102.csv` in the same folder where this page is hosted or set `window.EVENTS_CSV_URL` before loading the script.
 
