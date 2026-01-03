@@ -5,16 +5,17 @@ Files:
 - events.js — creates sample events, clustering, and the in-map day toggle control.
 
 How to run (locally):
-1. Open `index.html` directly in your browser (double-click the file).
-2. Use the "Load events CSV" control (top-left) to select `Speedquizzingexport20260102.csv` from your machine, or drag & drop the CSV onto the map.
+1. Host `index.html` and `Speedquizzingexport20260102.csv` together on your site (Netlify, GitHub Pages, or your server). The map will auto-load the CSV from the same folder.
 
-Optional (if you do have a static server):
+Optional: if you prefer a different CSV path, set `window.EVENTS_CSV_URL` before loading `events.js`, for example:
 
-```bash
-python -m http.server 8000
+```html
+<script>window.EVENTS_CSV_URL = '/data/events.csv';</script>
+<script src="/path/to/papaparse.min.js"></script>
+<script src="/path/to/events.js"></script>
 ```
 
-Then visit `http://localhost:8000`.
+Note: the in-page file uploader was removed to prevent site visitors from replacing the data; update the CSV through your hosting provider's file upload or repo commit.
 
 Notes:
 - Replace the sample `events` generation in `events.js` with a fetch call to your API returning event objects {lat, lng, day, title}.

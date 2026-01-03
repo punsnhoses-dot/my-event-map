@@ -1,6 +1,5 @@
 // events.js — loads your CSV, builds a Leaflet map with clustering, and an in-map day toggle control
 (async function(){
-  const csvPath = 'Speedquizzingexport20260102.csv';
 
   const map = L.map('map').setView([20,0], 2);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -129,30 +128,16 @@
     window._eventMap = { map, markerCluster, markersByDay, dayState, refreshCluster };
   }
 
-  // wire file input and drag/drop
-  const fileInput = document.getElementById('csvFile');
-  if(fileInput){
-    fileInput.addEventListener('change', (ev)=>{
-      const f = ev.target.files && ev.target.files[0];
-      if(!f) return;
-      Papa.parse(f, { header: true, skipEmptyLines: true, complete: (res)=>{ processRows(res.data||[]); } });
-    });
-  }
+  // Uploader removed: public visitors cannot upload files. To update CSV, replace `Speedquizzingexport20260102.csv` in the same folder where this page is hosted or set `window.EVENTS_CSV_URL` before loading the script.
 
-  // drag and drop onto map
-  const mapContainer = map.getContainer();
-  mapContainer.addEventListener('dragover', e=>{ e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
-  mapContainer.addEventListener('drop', e=>{
-    e.preventDefault();
-    const f = e.dataTransfer.files && e.dataTransfer.files[0];
-    if(!f) return;
-    Papa.parse(f, { header: true, skipEmptyLines: true, complete: (res)=>{ processRows(res.data||[]); } });
-  });
 
-  // If the page is hosted and a CSV URL is provided via `window.EVENTS_CSV_URL`, fetch it automatically.
-  if(window.EVENTS_CSV_URL){
-    Papa.parse(window.EVENTS_CSV_URL, { download: true, header: true, skipEmptyLines: true, complete: (res)=>{ processRows(res.data||[]); } });
-  }
+  // Auto-load CSV from host: prefer EVENTS_CSV_URL, otherwise attempt to fetch `Speedquizzingexport20260102.csv` from the same folder when served over http(s).
+  (function(){
+    const tryUrl = window.EVENTS_CSV_URL || (location.protocol.startsWith('http') ? 'Speedquizzingexport20260102.csv' : null);
+    if(tryUrl){
+      Papa.parse(tryUrl, { download: true, header: true, skipEmptyLines: true, complete: (res)=>{ processRows(res.data||[]); } });
+    }
+  })();
 
-  // default: do nothing until user loads a CSV (works with file://). If page is served, you can still drop or select the CSV.
+  // default: do nothing until data is provided (via hosted CSV). If you open the page via file:// you must use a local edit of the CSV or host it to test.
 })();
