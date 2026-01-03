@@ -1,5 +1,7 @@
 // events.js — loads your CSV, builds a Leaflet map with clustering, and an in-map day toggle control
-(async function(){
+(function(){ // simplified, synchronous version
+  // NOTE: this replaces earlier complex icon loading logic to restore a stable map quickly
+
 
   const map = L.map('map').setView([20,0], 2);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
