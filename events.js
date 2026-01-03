@@ -18,15 +18,16 @@
     if(dateStr){
       // try dd-MMM-yy or dd-MMM-YYYY
       const parts = dateStr.split('-');
+      let dt = null;
       if(parts.length===3){
         let [dd, mon, yy] = parts.map(p=>p.trim());
         let year = yy.length===2 ? '20'+yy : yy;
         const iso = `${dd} ${mon} ${year}`;
-        const dt = new Date(iso);
-        if(!isNaN(dt)) return dt.toLocaleDateString(undefined,{weekday:'long'});
+        dt = new Date(iso);
+        if(!isNaN(dt)) return ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dt.getDay()];
       }
       const dt2 = new Date(dateStr);
-      if(!isNaN(dt2)) return dt2.toLocaleDateString(undefined,{weekday:'long'});
+      if(!isNaN(dt2)) return ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dt2.getDay()];
     }
     return 'Unknown';
   }
@@ -56,6 +57,28 @@
       'Unknown': '#777'
     };
 
+    // counters per day and type (phone/pen)
+    const countsByDay = {};
+    const iconCache = { phone: {}, pen: {} };
+
+    function detectType(r){
+      const titleTest = (r.event_title||'').toLowerCase();
+      const preview = (r.source_preview||'').toLowerCase();
+      if(/speedquizzing event/i.test(r.event_title||'')) return 'phone';
+      if(titleTest.includes('pen and paper') || preview.includes('pen and paper') || titleTest.includes('pen quiz') ) return 'pen';
+      // default to phone for SpeedQuizzing-style data
+      return 'phone';
+    }
+
+    function getIcon(type, day){
+      if(iconCache[type] && iconCache[type][day]) return iconCache[type][day];
+      const filePrefix = type==='phone' ? 'PhoneQuiz' : 'PenQuiz';
+      const filename = `${filePrefix}${day}.png`;
+      const icon = L.icon({ iconUrl: filename, iconSize: [28,28], iconAnchor: [14,28], popupAnchor: [0,-24] });
+      iconCache[type][day] = icon;
+      return icon;
+    }
+
     rows.forEach(r=>{
       const lat = parseFloat(r.latitude);
       const lng = parseFloat(r.longitude);
@@ -63,6 +86,7 @@
       const day = parseDayLabel(r);
       daysSet.add(day);
       markersByDay[day] = markersByDay[day] || [];
+      countsByDay[day] = countsByDay[day] || { phone:0, pen:0, other:0 };
       const title = r.venue_name || r.event_title || r.event_id || 'Event';
       const date = (r.date||'').trim();
       const time = (r.time||'').trim();
@@ -73,8 +97,22 @@
       const teams = (r.teams_max||r.teams||'').toString().trim();
       const url = (r.event_url || r.source_page || '').trim();
 
-      const color = dayColors[day] || '#888';
-      const m = L.circleMarker([lat,lng], { radius: 7, fillColor: color, color: '#222', weight: 1, opacity: 1, fillOpacity: 0.9, title });
+      const type = detectType(r);
+      if(type === 'phone') countsByDay[day].phone++;
+      else if(type === 'pen') countsByDay[day].pen++;
+      else countsByDay[day].other++;
+
+      // choose an icon based on type/day; fall back to colored circle if icon missing
+      let marker;
+      try{
+        const icon = getIcon(type, day);
+        marker = L.marker([lat,lng], { icon, title });
+      }catch(e){
+        // fallback
+        const color = dayColors[day] || '#888';
+        marker = L.circleMarker([lat,lng], { radius: 7, fillColor: color, color: '#222', weight: 1, opacity: 1, fillOpacity: 0.9, title });
+      }
+
       let html = `<div style="font-weight:700;margin-bottom:4px">${escapeHtml(title)}</div>`;
       if(date || time) html += `<div style="margin-bottom:6px;color:#333">${escapeHtml([date, time].filter(Boolean).join(' '))}</div>`;
       if(address) html += `<div style="margin-bottom:6px">${escapeHtml(address)}</div>`;
@@ -84,11 +122,15 @@
       if(teams) html += `<div><strong>Teams max:</strong> ${escapeHtml(teams)}</div>`;
       if(url) html += `<div style="margin-top:6px"><a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Event page</a></div>`;
 
-      m.bindPopup(html);
-      m.bindTooltip(escapeHtml(title));
-      m.__day = day;
-      markersByDay[day].push(m);
+      marker.bindPopup(html);
+      marker.bindTooltip(escapeHtml(title));
+      marker.__day = day;
+      marker.__type = type;
+      markersByDay[day].push(marker);
     });
+
+    // expose counts for legend
+    processRows._countsByDay = countsByDay;
 
     // build days array and UI control (recreate control by removing old then adding)
     const weekdayOrder = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday','Unknown'];
@@ -180,7 +222,8 @@
           swatch.style.width = '12px'; swatch.style.height = '12px'; swatch.style.display = 'inline-block'; swatch.style.background = color; swatch.style.marginRight = '8px'; swatch.style.border = '1px solid #333';
           entry.appendChild(swatch);
           const label = document.createElement('span');
-          label.textContent = `${d} (${(markersByDay[d]||[]).length})`;
+          const info = (processRows._countsByDay && processRows._countsByDay[d]) || {phone:0,pen:0};
+          label.textContent = `${d}: ${(markersByDay[d]||[]).length} (${info.phone} phone, ${info.pen} pen)`;
           entry.appendChild(label);
           container.appendChild(entry);
         });

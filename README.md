@@ -22,3 +22,4 @@ Notes:
 - Popups now show `venue_name` as the title and include date/time, host, price, age limit, teams max, address, and a link to the event page.
 - For large datasets, server-side filtering or clamping markers per viewport can improve performance.
 - The day toggle control lives in-map (top-right) and adds/removes markers from the cluster for each day.
+- Marker icons: place PNGs in the same folder as `index.html`. The script will look for files named `PhoneQuizMonday.png`, `PhoneQuizTuesday.png`, … `PhoneQuizSunday.png` for SpeedQuizzing events and `PenQuizMonday.png` … `PenQuizSunday.png` for pen-and-paper events. If an icon is missing, the app falls back to a coloured circle marker.
