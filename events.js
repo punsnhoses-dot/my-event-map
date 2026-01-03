@@ -43,6 +43,19 @@
 
   function processRows(rows){
     clearData();
+
+    // colours for days of week
+    const dayColors = {
+      'Monday': '#1f77b4',
+      'Tuesday': '#ff7f0e',
+      'Wednesday': '#2ca02c',
+      'Thursday': '#d62728',
+      'Friday': '#9467bd',
+      'Saturday': '#8c564b',
+      'Sunday': '#e377c2',
+      'Unknown': '#777'
+    };
+
     rows.forEach(r=>{
       const lat = parseFloat(r.latitude);
       const lng = parseFloat(r.longitude);
@@ -60,7 +73,8 @@
       const teams = (r.teams_max||r.teams||'').toString().trim();
       const url = (r.event_url || r.source_page || '').trim();
 
-      const m = L.marker([lat,lng], { title });
+      const color = dayColors[day] || '#888';
+      const m = L.circleMarker([lat,lng], { radius: 7, fillColor: color, color: '#222', weight: 1, opacity: 1, fillOpacity: 0.9, title });
       let html = `<div style="font-weight:700;margin-bottom:4px">${escapeHtml(title)}</div>`;
       if(date || time) html += `<div style="margin-bottom:6px;color:#333">${escapeHtml([date, time].filter(Boolean).join(' '))}</div>`;
       if(address) html += `<div style="margin-bottom:6px">${escapeHtml(address)}</div>`;
@@ -71,6 +85,8 @@
       if(url) html += `<div style="margin-top:6px"><a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Event page</a></div>`;
 
       m.bindPopup(html);
+      m.bindTooltip(escapeHtml(title));
+      m.__day = day;
       markersByDay[day].push(m);
     });
 
@@ -143,6 +159,37 @@
     }
 
     map.addControl(new DayToggleControl());
+
+    // remove any existing legend and add a colour legend for the days
+    const existingLegend = document.querySelector('.leaflet-control.legend-daycolors');
+    if(existingLegend && existingLegend._leaflet_pos){ existingLegend.parentNode && existingLegend.parentNode.removeChild(existingLegend); }
+
+    const LegendControl = L.Control.extend({
+      options: { position: 'bottomright' },
+      onAdd: function(){
+        const container = L.DomUtil.create('div','day-toggle legend-daycolors');
+        container.innerHTML = `<div style="font-weight:600;margin-bottom:6px">Day colours</div>`;
+        const dayColorsLocal = {
+          'Monday': '#1f77b4', 'Tuesday': '#ff7f0e', 'Wednesday': '#2ca02c', 'Thursday': '#d62728', 'Friday': '#9467bd', 'Saturday': '#8c564b', 'Sunday': '#e377c2', 'Unknown': '#777'
+        };
+        days.forEach(d=>{
+          const color = dayColorsLocal[d] || '#888';
+          const entry = document.createElement('div');
+          entry.style.display = 'flex'; entry.style.alignItems = 'center'; entry.style.marginBottom = '4px';
+          const swatch = document.createElement('span');
+          swatch.style.width = '12px'; swatch.style.height = '12px'; swatch.style.display = 'inline-block'; swatch.style.background = color; swatch.style.marginRight = '8px'; swatch.style.border = '1px solid #333';
+          entry.appendChild(swatch);
+          const label = document.createElement('span');
+          label.textContent = `${d} (${(markersByDay[d]||[]).length})`;
+          entry.appendChild(label);
+          container.appendChild(entry);
+        });
+        return container;
+      }
+    });
+
+    map.addControl(new LegendControl());
+
     window._eventMap = { map, markerCluster, markersByDay, dayState, refreshCluster };
   }
 
