@@ -79,10 +79,32 @@
       return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
     }
 
-    function getIconFilename(type, day){
+    function shortDay(day){
+      const map = { 'Monday':'Mon','Tuesday':'Tue','Wednesday':'Wed','Thursday':'Thu','Friday':'Fri','Saturday':'Sat','Sunday':'Sun' };
+      return map[String(day)] || (String(day||'').slice(0,3));
+    }
+
+    const triedIconFiles = new Set();
+
+    function getIconCandidates(type, day){
       const filePrefix = type==='phone' ? 'PhoneQuiz' : 'PenQuiz';
       const dayKey = sanitizeDayForFile(day);
-      return `${filePrefix}${dayKey}.png`;
+      const short = shortDay(dayKey);
+      const candidates = [];
+      if(dayKey){
+        candidates.push(`${filePrefix}${dayKey}.png`);
+        candidates.push(`${filePrefix}${short}.png`);
+        candidates.push(`${filePrefix}${dayKey.toLowerCase()}.png`);
+        candidates.push(`${filePrefix}${short.toLowerCase()}.png`);
+        candidates.push(`${filePrefix}-${dayKey}.png`);
+        candidates.push(`${filePrefix}_${dayKey}.png`);
+        candidates.push(`${filePrefix}${dayKey.replace(/\s+/g,'')}.png`);
+      }
+      // fallbacks
+      candidates.push(`${filePrefix}.png`);
+      candidates.push('marker-fallback.png');
+      // dedupe
+      return Array.from(new Set(candidates));
     }
 
     function loadImagePromise(url, timeout = 2500){
@@ -101,16 +123,32 @@
       // return cached result if available (may be icon or null)
       if(iconCache[type] && Object.prototype.hasOwnProperty.call(iconCache[type], day)) return iconCache[type][day];
       if(iconPromises[type] && iconPromises[type][day]) return await iconPromises[type][day];
-      const filename = getIconFilename(type, day);
-      const dayKey = sanitizeDayForFile(day);
       const promise = (async ()=>{
-        // only attempt to load icons for known weekdays
-        if(!dayKey || validDays.indexOf(dayKey)===-1) return null;
-        const ok = await loadImagePromise(filename);
-        if(!ok){ missingIconFiles.add(filename); iconCache[type][day] = null; return null; }
-        const icon = L.icon({ iconUrl: filename, iconSize: [28,28], iconAnchor: [14,28], popupAnchor: [0,-24] });
-        iconCache[type][day] = icon;
-        return icon;
+        const dayKey = sanitizeDayForFile(day);
+        // if day unknown, try base icons only
+        if(!dayKey || validDays.indexOf(dayKey)===-1){
+          const base = `${type==='phone' ? 'PhoneQuiz' : 'PenQuiz'}.png`;
+          triedIconFiles.add(base);
+          const okBase = await loadImagePromise(base);
+          if(okBase){ const icon = L.icon({ iconUrl: base, iconSize: [28,28], iconAnchor: [14,28], popupAnchor: [0,-24] }); iconCache[type][day] = icon; return icon; }
+          triedIconFiles.add('marker-fallback.png');
+          const okFallback = await loadImagePromise('marker-fallback.png');
+          if(okFallback){ const icon = L.icon({ iconUrl: 'marker-fallback.png', iconSize: [28,28], iconAnchor: [14,28], popupAnchor: [0,-24] }); iconCache[type][day] = icon; return icon; }
+          return null;
+        }
+
+        const candidates = getIconCandidates(type, day);
+        for(const fn of candidates){
+          triedIconFiles.add(fn);
+          const ok = await loadImagePromise(fn);
+          if(ok){
+            const icon = L.icon({ iconUrl: fn, iconSize: [28,28], iconAnchor: [14,28], popupAnchor: [0,-24] });
+            iconCache[type][day] = icon;
+            return icon;
+          }
+          missingIconFiles.add(fn);
+        }
+        return null;
       })();
       iconPromises[type][day] = promise;
       const icon = await promise;
@@ -271,9 +309,10 @@
 
     map.addControl(new LegendControl());
 
-    // expose missing icon files for debugging
+    // expose tried and missing icon files for debugging
     processRows._missingIconFiles = Array.from(missingIconFiles);
-    window._eventMap = { map, markerCluster, markersByDay, dayState, refreshCluster, missingIconFiles: processRows._missingIconFiles };
+    processRows._triedIconFiles = Array.from(triedIconFiles);
+    window._eventMap = { map, markerCluster, markersByDay, dayState, refreshCluster, missingIconFiles: processRows._missingIconFiles, triedIconFiles: processRows._triedIconFiles };
   }
 
   // Uploader removed: public visitors cannot upload files. To update CSV, replace `Speedquizzingexport20260102.csv` in the same folder where this page is hosted or set `window.EVENTS_CSV_URL` before loading the script.
