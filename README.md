@@ -18,6 +18,7 @@ Optional: if you prefer a different CSV path, set `window.EVENTS_CSV_URL` before
 Note: the in-page file uploader was removed to prevent site visitors from replacing the data; update the CSV through your hosting provider's file upload or repo commit.
 
 Notes:
-- Replace the sample `events` generation in `events.js` with a fetch call to your API returning event objects {lat, lng, day, title}.
+- Replace the sample `events` generation in `events.js` with a fetch call to your API returning event objects {lat, lng, day, venue_name, date, time, host_name, price, age_limit, teams_max, event_url}.
+- Popups now show `venue_name` as the title and include date/time, host, price, age limit, teams max, address, and a link to the event page.
 - For large datasets, server-side filtering or clamping markers per viewport can improve performance.
 - The day toggle control lives in-map (top-right) and adds/removes markers from the cluster for each day.

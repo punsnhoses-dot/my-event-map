@@ -50,9 +50,27 @@
       const day = parseDayLabel(r);
       daysSet.add(day);
       markersByDay[day] = markersByDay[day] || [];
-      const title = r.event_title || r.venue_name || r.event_id || 'Event';
-      const m = L.marker([lat,lng]);
-      m.bindPopup(`<strong>${escapeHtml(title)}</strong><br/>${escapeHtml(r.date||'')}`);
+      const title = r.venue_name || r.event_title || r.event_id || 'Event';
+      const date = (r.date||'').trim();
+      const time = (r.time||'').trim();
+      const address = (r.address||'').trim();
+      const host = (r.host_name||'').trim();
+      const price = (r.price||'').trim();
+      const age = (r.age_limit||'').trim();
+      const teams = (r.teams_max||r.teams||'').toString().trim();
+      const url = (r.event_url || r.source_page || '').trim();
+
+      const m = L.marker([lat,lng], { title });
+      let html = `<div style="font-weight:700;margin-bottom:4px">${escapeHtml(title)}</div>`;
+      if(date || time) html += `<div style="margin-bottom:6px;color:#333">${escapeHtml([date, time].filter(Boolean).join(' '))}</div>`;
+      if(address) html += `<div style="margin-bottom:6px">${escapeHtml(address)}</div>`;
+      if(host) html += `<div><strong>Host:</strong> ${escapeHtml(host)}</div>`;
+      if(price) html += `<div><strong>Price:</strong> ${escapeHtml(price)}</div>`;
+      if(age) html += `<div><strong>Age limit:</strong> ${escapeHtml(age)}</div>`;
+      if(teams) html += `<div><strong>Teams max:</strong> ${escapeHtml(teams)}</div>`;
+      if(url) html += `<div style="margin-top:6px"><a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Event page</a></div>`;
+
+      m.bindPopup(html);
       markersByDay[day].push(m);
     });
 
