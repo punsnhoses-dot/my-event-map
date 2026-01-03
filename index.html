@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Event Map with Clustering & Day Toggle</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+  <style>
+    html,body,#map { height:100%; margin:0; padding:0 }
+    #map { height: 100vh }
+    .day-toggle { font-family: Arial, Helvetica, sans-serif; background: rgba(255,255,255,0.95); padding:8px; border-radius:6px; }
+    .day-toggle button { display:block; margin:4px 0; width:140px; text-align:left; }
+    .day-toggle .active { background:#2b8fbf; color:#fff }
+    .day-toggle .controls { margin-top:6px; display:flex; gap:6px }
+    .day-count { font-size:0.9em; color:#444; margin-left:6px }
+    .file-control { position: absolute; left: 12px; top: 12px; z-index: 1000; }
+    .file-control input[type=file] { display:block }
+    .file-control .hint { font-size:0.85em; color:#333; margin-top:6px }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <div class="file-control day-toggle" id="fileControl">
+    <div style="font-weight:600;margin-bottom:6px">Load events CSV</div>
+    <input id="csvFile" type="file" accept=".csv" />
+    <div class="hint">Open the Speedquizzing CSV from your machine. You can also drag & drop the file onto the map.</div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
+  <script src="events.js"></script>
+</body>
+</html>
